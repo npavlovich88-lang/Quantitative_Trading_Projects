@@ -67,17 +67,6 @@ Java (MotiveWave SDK): custom studies that stream bid/ask, delta, and footprint 
 Data: MES/MNQ tick history (2020–2026) and level-2 order book data
 Repository layout
 
-Update this section to match the actual folders you upload.
-
-├── README.md
-├── research/          # write-ups for each hypothesis and its verdict
-├── validation/        # permutation tests, CSCV/PBO, variance ratio
-├── costs/             # slippage and commission models
-├── simulator/         # evaluation-account Monte Carlo
-├── profile/           # TPO / value-area engine
-└── charts/            # figures used in this README
-
-Not included: raw market data (licensed by the data vendor), account credentials, and personal trade records.
 
 What I learned
 A strategy that looks great in a backtest is usually luck. The only fair test is one that tries hard to prove the idea wrong.

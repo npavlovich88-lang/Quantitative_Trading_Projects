@@ -1,0 +1,241 @@
+//@version=6
+// =============================================================================================
+//  MEASURED CONTEXT  --  MES / MNQ
+// =============================================================================================
+//  Every number in this indicator is something that was MEASURED on 2020-2026 MES and MNQ tick
+//  and bar data, not something that seemed reasonable. Nothing here is an entry signal, because
+//  twelve pre-registered hypotheses failed to find one. What it shows instead:
+//
+//    1. THE COST BAR       what probability your stop/target actually has to beat, versus the
+//                          1/3 a coin flip gives. This is the single most useful result from the
+//                          whole study and no charting package shows it.
+//    2. THE REGIME         variance ratio, efficiency, displacement. Measured below 1 on 98% of
+//                          64 cells (p = 0.0033): MES and MNQ MEAN-REVERT intraday.
+//    3. THE LEVELS         prior-session value area, session VWAP with sigma bands, opening
+//                          range. Of twelve level types tested against a RANDOM line, only the
+//                          prior-session value area high separated from it once the search was
+//                          charged for (corrected p = 0.0398, not yet verified out of sample).
+//
+//  WHAT IS DELIBERATELY ABSENT
+//    No moving-average cross signal. Tested across 6,060 configurations, three kernels, seven
+//    timeframes, both symbols: nothing. A 480-configuration sweep of stops, targets and filters
+//    returned p = 0.9701 -- shuffled markets searched 480 ways beat the real data 97% of the
+//    time. Adding arrows here would only make that easier to forget.
+//
+//  WHAT CANNOT BE BUILT HERE
+//    Order flow imbalance. Pine has no order book and no quote stream. OFI is defined on changes
+//    in the size resting at the best bid and ask, and that data is not exposed. The up/down
+//    volume proxy available from lower timeframes is the TICK rule; the real work uses the QUOTE
+//    rule against the prevailing best bid/ask, which signs 97.2% of prints unambiguously.
+// =============================================================================================
+
+indicator("Measured Context", "MC", overlay = true, max_lines_count = 100, max_labels_count = 50)
+
+// ---------------------------------------------------------------------------------- inputs
+grpC = "Cost bar  --  what your stop/target must beat"
+stopPts   = input.float(20.0, "Stop (points)",   group = grpC, minval = 0.25, step = 0.25)
+targPts   = input.float(40.0, "Target (points)", group = grpC, minval = 0.25, step = 0.25)
+costPts   = input.float(1.23, "Round turn (points)", group = grpC, minval = 0.0,  step = 0.01,
+     tooltip = "Measured 2026-09-22 incl. commission, exchange + NFA fees, spread and slippage.\n" +
+               "MES 0.544   MNQ 1.235   (Topstep/Lucid average, 1 contract)")
+
+grpR = "Regime"
+erLen     = input.int(20, "Efficiency / displacement lookback", group = grpR, minval = 5)
+vrQ       = input.int(8,  "Variance ratio horizon q",           group = grpR, minval = 2)
+vrWin     = input.int(250,"Variance ratio window",              group = grpR, minval = 50)
+
+grpL = "Levels"
+showVA    = input.bool(true,  "Prior session value area", group = grpL)
+showVWAP  = input.bool(true,  "Session VWAP + 1 sigma",   group = grpL)
+showOR    = input.bool(true,  "Opening range",            group = grpL)
+orMins    = input.int(30, "Opening range minutes",        group = grpL, minval = 5)
+rthSess   = input.session("0830-1500", "RTH session",     group = grpL)
+bucketPts = input.float(1.0, "Profile bucket (points)",  group = grpL, minval = 0.25, step = 0.25,
+     tooltip = "MES 1.0 is sensible, MNQ 4.0. Smaller is finer, but the bucket count must still cover the session range.")
+nBuckets  = input.int(400, "Profile buckets",            group = grpL, minval = 50, maxval = 2000)
+
+// ---------------------------------------------------------------------------------- regime
+atrV   = ta.atr(14)
+chg    = ta.change(close)
+path   = math.sum(math.abs(chg), erLen)
+netMv  = close - close[erLen]
+ser    = path > 0 ? netMv / path : 0.0          // signed efficiency ratio, -1..+1
+dispA  = atrV > 0 ? netMv / atrV : 0.0          // displacement in ATR units
+
+// Variance ratio: Var(q-period return) / (q * Var(1-period return)).
+// Below 1 means moves retrace -- a trail is hit before the move completes.
+// Above 1 means moves extend. Measured on this data: below 1 almost everywhere.
+rq     = close - close[vrQ]
+var1   = ta.variance(chg, vrWin)
+varq   = ta.variance(rq,  vrWin)
+vr     = var1 > 0 ? varq / (vrQ * var1) : na
+
+// Persistence: how many of the last N bars agree in direction. Uncorrelated with displacement,
+// and measured at chance -- shown because it is the honest answer to "how choppy is this".
+persist = math.abs(math.sum(math.sign(chg), erLen)) / erLen
+
+// ---------------------------------------------------------------------------------- levels
+// Prior SESSION value area. Pine cannot read TradingView's volume profile, so this is the same
+// bar-derived approximation the research used: each bar's volume spread across its own range.
+// Measured against the tick-derived profile it lands within 2.2% of the day's range for POC and
+// 4.5-6.8% for the value-area edges.
+// A REAL volume profile, not a proxy. The first version derived the value area as VWAP plus
+// or minus a quarter of the session range, which made it track VWAP instead of describing where
+// volume actually traded -- visible on a chart as levels that follow price. Since the prior
+// session's value-area HIGH was the only level of twelve that separated from a randomly drawn
+// line once the search was charged for, that approximation was not good enough.
+//
+// Each bar's volume is spread uniformly across the buckets its own high-low range spans, which
+// is the same bar-derived approximation the research used. Measured against the tick-derived
+// profile it places POC within 2.2% of the day's range and the value-area edges within 4.5-6.8%.
+var float pocP = na
+var float vahP = na
+var float valP = na
+var float anchor = na
+var array<float> prof = array.new<float>(nBuckets, 0.0)
+
+inRth  = not na(time(timeframe.period, rthSess))
+newDay = ta.change(time("D")) != 0
+
+// ta.vwap carries series state, so it MUST be evaluated on every bar. Calling it inside an
+// `if` block corrupts it -- that was the original bug here.
+[vwapV, vUp, vDn] = ta.vwap(hlc3, newDay, 1.0)
+
+priceOf(i) => anchor + (i - nBuckets / 2) * bucketPts
+indexOf(p) => int(math.round((p - anchor) / bucketPts)) + nBuckets / 2
+
+if newDay
+    // Close out the finished session before resetting.
+    tot = array.sum(prof)
+    if tot > 0
+        pocI = 0
+        pocV = -1.0
+        for i = 0 to nBuckets - 1
+            v = array.get(prof, i)
+            if v > pocV
+                pocV := v
+                pocI := i
+        // Expand outward from the POC until 70% of the session's volume is enclosed.
+        lo = pocI
+        hi = pocI
+        acc = pocV
+        while acc < 0.70 * tot and (lo > 0 or hi < nBuckets - 1)
+            vDown = lo > 0 ? array.get(prof, lo - 1) : -1.0
+            vUpB  = hi < nBuckets - 1 ? array.get(prof, hi + 1) : -1.0
+            if vUpB >= vDown and hi < nBuckets - 1
+                hi += 1
+                acc += vUpB
+            else if lo > 0
+                lo -= 1
+                acc += vDown
+            else
+                break
+        pocP := priceOf(pocI)
+        vahP := priceOf(hi)
+        valP := priceOf(lo)
+    array.fill(prof, 0.0)
+    anchor := open
+
+if inRth and not na(anchor) and volume > 0
+    iLo = indexOf(low)
+    iHi = indexOf(high)
+    if iLo <= iHi and iHi >= 0 and iLo < nBuckets
+        iLo := math.max(iLo, 0)
+        iHi := math.min(iHi, nBuckets - 1)
+        per = volume / (iHi - iLo + 1)
+        for i = iLo to iHi
+            array.set(prof, i, array.get(prof, i) + per)
+
+// Opening range
+var float orHi = na
+var float orLo = na
+inOR = inRth and (time - timestamp(year, month, dayofmonth, 8, 30)) < orMins * 60000
+if newDay
+    orHi := na
+    orLo := na
+if inOR
+    orHi := na(orHi) ? high : math.max(orHi, high)
+    orLo := na(orLo) ? low  : math.min(orLo, low)
+
+plot(showVA   and not na(vahP) ? vahP : na, "prior VAH", color.new(color.orange, 0),  1, plot.style_linebr)
+plot(showVA   and not na(valP) ? valP : na, "prior VAL", color.new(color.orange, 40), 1, plot.style_linebr)
+plot(showVA   and not na(pocP) ? pocP : na, "prior POC", color.new(color.gray, 30),   1, plot.style_linebr)
+plot(showVWAP ? vwapV : na, "VWAP",    color.new(color.blue, 0), 2)
+plot(showVWAP ? vUp   : na, "VWAP +1s",color.new(color.blue, 65), 1)
+plot(showVWAP ? vDn   : na, "VWAP -1s",color.new(color.blue, 65), 1)
+plot(showOR and not na(orHi) and not inOR ? orHi : na, "OR high", color.new(color.purple, 20), 1, plot.style_linebr)
+plot(showOR and not na(orLo) and not inOR ? orLo : na, "OR low",  color.new(color.purple, 20), 1, plot.style_linebr)
+
+// ---------------------------------------------------------------------------------- cost bar
+// The identity that matters:
+//     breakeven P(target) = (S + C) / (S + T)
+//     random walk P       =  S      / (S + T)
+//     gap you must beat   =  C      / (S + T)
+// The gap depends ONLY on the total size of the trade in points -- not on the risk-reward
+// ratio. A 5-point MES stop faces three times the drag of a 15-point stop at the same 1:2.
+beP   = (stopPts + costPts) / (stopPts + targPts)
+rwP   =  stopPts            / (stopPts + targPts)
+gapP  =  costPts            / (stopPts + targPts)
+rr    = targPts / stopPts
+
+// MEASURED P(target before stop), MES/MNQ RTH 2020-2026 train, both sides pooled.
+// The market is almost exactly FAIR at 1:1 -- measured 0.4960 to 0.4999 against a coin's 0.5000.
+// It gets progressively WORSE than a coin as the target widens, because moves retrace:
+//
+//        RR       1        2        3        5
+//   MES 5m    -0.000   -0.054   -0.093   -0.116
+//   MES 15m   -0.002   -0.007   -0.026   -0.051
+//   MNQ 5m    -0.001   -0.028   -0.067   -0.107
+//   MNQ 15m   -0.004   +0.003   -0.003   -0.031
+//
+// So a wide target does NOT solve the cost problem. The gap C/(S+T) shrinks as the trade grows,
+// but P(target) falls faster. Net per trade on MES 5m runs -0.55, -2.99, -6.12, -10.94 across
+// those four ratios. This is the opposite of the usual "always take 1:3 or better" advice, and
+// it is a direct consequence of the variance ratio sitting below 1 on 98% of cells measured.
+deficit = rr <= 1.0  ? 0.002 :
+          rr <= 2.0  ? 0.020 :
+          rr <= 3.0  ? 0.045 :
+                       0.080
+coinP   = 1.0 / (1.0 + rr)
+expectP = math.max(coinP - deficit, 0.0)      // what this market has actually delivered
+evPts   = expectP * targPts - (1.0 - expectP) * stopPts - costPts
+
+var table tb = table.new(position.top_right, 2, 12, border_width = 1)
+if barstate.islast
+    hdr = color.new(color.gray, 80)
+    bad = color.new(color.red, 75)
+    ok  = color.new(color.green, 75)
+
+    table.cell(tb, 0, 0, "COST BAR", bgcolor = hdr, text_size = size.small)
+    table.cell(tb, 1, 0, str.format("{0,number,#.##} / {1,number,#.##}  RR {2,number,#.#}",
+         stopPts, targPts, rr), bgcolor = hdr, text_size = size.small)
+
+    table.cell(tb, 0, 1, "need P(target) >", text_size = size.small)
+    table.cell(tb, 1, 1, str.tostring(beP, "#.####"), text_size = size.small)
+    table.cell(tb, 0, 2, "coin flip gives", text_size = size.small)
+    table.cell(tb, 1, 2, str.tostring(coinP, "#.####"), text_size = size.small)
+    table.cell(tb, 0, 3, "this market gives", text_size = size.small)
+    table.cell(tb, 1, 3, str.tostring(expectP, "#.####") +
+         str.format("  ({0,number,#.###})", -deficit),
+         bgcolor = expectP >= beP ? ok : bad, text_size = size.small)
+    table.cell(tb, 0, 4, "cost gap C/(S+T)", text_size = size.small)
+    table.cell(tb, 1, 4, str.tostring(gapP, "#.####"), text_size = size.small)
+    table.cell(tb, 0, 5, "expected / trade", text_size = size.small)
+    table.cell(tb, 1, 5, str.format("{0,number,#.##} pts", evPts),
+         bgcolor = evPts > 0 ? ok : bad, text_size = size.small)
+
+    table.cell(tb, 0, 6, "REGIME", bgcolor = hdr, text_size = size.small)
+    table.cell(tb, 1, 6, "", bgcolor = hdr, text_size = size.small)
+    table.cell(tb, 0, 7, str.format("VR({0})", vrQ), text_size = size.small)
+    table.cell(tb, 1, 7, na(vr) ? "--" : str.tostring(vr, "#.###") +
+         (vr < 1 ? "  reverts" : "  extends"),
+         bgcolor = na(vr) ? na : (vr < 1 ? bad : ok), text_size = size.small)
+    table.cell(tb, 0, 8, "signed efficiency", text_size = size.small)
+    table.cell(tb, 1, 8, str.tostring(ser, "#.###"), text_size = size.small)
+    table.cell(tb, 0, 9, "displacement (ATR)", text_size = size.small)
+    table.cell(tb, 1, 9, str.tostring(dispA, "#.##"), text_size = size.small)
+    table.cell(tb, 0, 10, "persistence", text_size = size.small)
+    table.cell(tb, 1, 10, str.tostring(persist, "#.##"), text_size = size.small)
+    table.cell(tb, 0, 11, "spread/ATR", text_size = size.small)
+    table.cell(tb, 1, 11, atrV > 0 ? str.tostring(costPts / atrV, "#.###") : "--",
+         text_size = size.small)

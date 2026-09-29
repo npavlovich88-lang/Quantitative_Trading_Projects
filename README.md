@@ -67,6 +67,70 @@ Java (MotiveWave SDK): custom studies that stream bid/ask, delta, and footprint 
 Data: MES/MNQ tick history (2020–2026) and level-2 order book data
 Repository layout
 
+```
+src/quant/                    core library
+  permutation.py              grouped bar permutation, vectorised (~100x the reference loop)
+  mcpt.py                     Monte Carlo permutation test driver
+  pbo.py                      CSCV / probability of backtest overfitting
+  variance_ratio.py           Lo-MacKinlay variance ratios, computed per session segment
+  information.py              forward-outcome evaluation and family p-values
+  hypothesis.py               pre-registration records, hashed before the run
+  verdict.py                  four-state verdict; refuses a config below EDGE
+  protocol.py                 research protocol enforcement
+  costs.py                    commissions, fees, measured level-2 book-walk slippage
+  prop.py                     evaluation and funded-account simulators
+  data_splits.py              declared train / validate / holdout boundaries
+  splits.py                   walk-forward planning
+  bar_integrity.py            bar and session sanity checks
+  diagnostics.py              run diagnostics
+  register.py                 run registration
+  strategy.py                 shared indicator and data-loading helpers
+  viz.py, viz_strategy.py     plotting
+
+src/quant/strategies/         strategy and indicator families
+  indicator_menu.py           indicator array x six signal definitions
+  vwap_bands.py               anchored VWAP with volume-weighted sigma bands
+  opening_range_reclaim.py    opening-range break, retest and reclaim
+  levels.py                   structural levels, with a random-level control
+  ma_pairs.py                 moving-average pair family
+  ichimoku.py                 Ichimoku line family
+  kama_ema.py                 adaptive-average crosses
+  cross_filter.py             cross conditioners
+  cross_frequency.py          cross frequency analysis
+  path_quality.py             path-quality conditioners
+  ema_cross.py                baseline EMA cross
+  ema_cross_sep.py            separated EMA cross variant
+
+scripts/                      40 runnable experiments and reports, including:
+  direction_screen.py         is direction predictable at 5-20 bars?
+  direction_ceiling.py        the bound on every linear filter (every moving average) at once
+  indicator_array.py          indicator families x signal definitions, with negative controls
+  variance_ratio_survey.py    trend vs mean reversion by horizon
+  vwap_band_race.py           VWAP band reversion vs extension
+  vwap_band_by_session.py     the same, bucketed by time of day
+  orb_reclaim_test.py         opening-range break, retest and reclaim
+  prop_validate.py            simulator checked against P(pass) = L/(T+L)
+  prop_spec_feasibility.py    pass rate, time to pass and payout attainment surfaces
+  prop_two_day_pass.py        how fast an evaluation can be passed, and at what size
+  replicate_youngblood.py     reproduces a published SSRN result, then adds real costs
+  build_volume_profiles.py    TPO / volume profile engine (POC, VAH, VAL) from raw ticks
+  build_ofi_bars.py           order-flow imbalance bars from level-2 quotes
+
+tests/                        15 modules, 169 tests
+pine/                         TradingView studies (measurement only, no entry signals)
+research/hypotheses.jsonl     the pre-registration ledger
+```
+
+Market data is not included: it is large, vendor licensed and not redistributable.
+Set `QUANT_DATA_ROOT` to point at your own copy.
+
+```bash
+pip install -e .
+export QUANT_DATA_ROOT=/path/to/data
+pytest -q
+```
+
+Tests that require market data skip cleanly when it is absent.
 
 What I learned
 A strategy that looks great in a backtest is usually luck. The only fair test is one that tries hard to prove the idea wrong.

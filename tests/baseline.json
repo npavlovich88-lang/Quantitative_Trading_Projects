@@ -1,0 +1,46 @@
+{
+ "A": {
+  "n": 350,
+  "pnl": 4882.506431,
+  "r": 0.27321763,
+  "sig": "e04f738621e057d1"
+ },
+ "B": {
+  "n": 246,
+  "pnl": 6053.616766,
+  "r": 0.59483779,
+  "sig": "da5c796382254162"
+ },
+ "C": {
+  "n": 241,
+  "pnl": 6394.0,
+  "r": 0.62880526,
+  "sig": "8711e54b163b1ae4"
+ },
+ "D": {
+  "n": 256,
+  "pnl": 6306.155001,
+  "r": 0.57209655,
+  "sig": "f58e6e745d851c14"
+ },
+ "_features": {
+  "c": 2473743956.25,
+  "atr": 3625677.385875,
+  "el": 46480,
+  "es": 4723,
+  "ok_long": 4955,
+  "ok_short": 4614,
+  "st_bull": 68415,
+  "inwin": 36640
+ },
+ "_regenerated": {
+  "date": "2026-09-22",
+  "reason": "MNQ bars repaired: 145 duplicate timestamps merged in the 1m file (open=first, high=max, low=min, close=last, volume=sum) and all coarser timeframes re-derived. The previous build kept an arbitrary one of each duplicate pair, which on 2022-12-01 05:00 UTC meant a 1-contract fragment survived and a 150-contract bar was discarded. Presets A, C, D are bit-identical; only B moved.",
+  "previous": {
+   "A": "e04f738621e057d1",
+   "B": "323189b06e75b6c0",
+   "C": "8711e54b163b1ae4",
+   "D": "f58e6e745d851c14"
+  }
+ }
+}

@@ -1,0 +1,95 @@
+# ---------------------------------------------------------------- market data
+# Raw and derived market data never enters this repository. It is large, vendor
+# licensed and not redistributable. Point QUANT_DATA_ROOT at it instead.
+data/
+Data/
+*.csv
+*.parquet
+*.pq
+*.feather
+*.arrow
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.json.gz
+*.zip
+*.7z
+*.gz
+*.tar
+# tick / level-2 archives, whatever they get named
+*_T2/
+*_ohlcv*
+*_ofi*
+*tick*
+*_L2*
+*depth*
+
+# keep the small fixtures the tests need, and source files the data patterns catch
+!tests/baseline.json
+!research/hypotheses.jsonl
+!scripts/*.py
+!src/**/*.py
+!tests/*.py
+
+# ---------------------------------------------------------------- secrets
+.env
+.env.*
+*.env
+secrets.*
+*secret*
+*credential*
+*password*
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*token*
+*apikey*
+*api_key*
+.netrc
+.htpasswd
+id_rsa*
+id_ed25519*
+*.ovpn
+
+# broker / platform artefacts
+topstep*
+tradovate*
+rithmic*
+ninjatrader*
+*account_id*
+*accounts.json*
+
+# ---------------------------------------------------------------- run output
+# Research output is regenerable and often large; the pre-registration ledger is
+# the one artefact worth keeping under version control.
+out/
+!out/hypotheses.jsonl
+!out/holdout_ledger.jsonl
+*.log
+
+# ---------------------------------------------------------------- python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------- editors / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp

@@ -1,0 +1,83 @@
+[project]
+name = "quant-research"
+version = "0.1.0"
+description = "MES/MNQ intraday futures strategy research: validation before performance."
+requires-python = ">=3.12"
+dependencies = ["numpy>=2.0", "pandas>=2.2"]
+
+[project.optional-dependencies]
+dev = ["ruff", "mypy", "pytest", "pre-commit"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle          -- PEP 8 layout
+    "F",         # pyflakes             -- undefined names, unused imports
+    "I",         # isort                -- import order
+    "UP",        # pyupgrade            -- modern syntax
+    "B",         # bugbear              -- real bug patterns
+    "SIM",       # simplify             -- "flat is better than nested"
+    "C4",        # comprehensions
+    "RET",       # return consistency
+    "ARG",       # unused arguments     -- a classic AI-code smell
+    "PD",        # pandas-vet           -- .values vs .to_numpy, inplace, chained assignment
+    "NPY",       # numpy-specific       -- legacy np.random, deprecated aliases
+    "PT",        # pytest style
+    "RUF",       # ruff's own
+]
+ignore = [
+    # ruff-format owns line length for code. E501 now only fires on long string literals and
+    # docstring prose, which the formatter deliberately will not split -- and forcing a break
+    # mid-sentence to satisfy a linter makes the prose worse, not the code better.
+    "E501",
+    "E741",      # ambiguous name `l` -- `h, l, c` for high/low/close is the domain convention
+    "PD901",     # `df` as a name is fine here
+    "RET504",    # a named result before return often documents the units
+    "C408",      # dict(a=1, b=2) is deliberate: keyword form reads better than {"a": 1}
+                 # for the wide feature/result records this code passes around
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG"]          # pytest fixtures look like unused args
+# Runner scripts insert the src path before importing quant, so their imports cannot be
+# at the top of the file. That is the point of the sys.path line, not an oversight.
+"scripts/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["quant"]
+
+# ---------------------------------------------------------------------------- mypy
+# Deliberately not strict everywhere. Per the project's own guidance: type the objects that
+# cross module boundaries (bars, trades, results), not every local numpy expression.
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+no_implicit_optional = true
+disallow_untyped_defs = false        # raise to true module by module as each is annotated
+
+[[tool.mypy.overrides]]
+module = ["pandas.*", "numpy.*", "numba.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "slow: needs the real CSVs on F: and takes minutes (deselect with '-m \"not slow\"')",
+]

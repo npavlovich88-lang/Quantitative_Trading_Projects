@@ -1,0 +1,31 @@
+# Runs before every commit. Nothing messy enters history.
+#   install once:  pre-commit install
+#   run manually:  pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2000]        # market data belongs on F:, not in git
+      - id: debug-statements        # a stray breakpoint() in a backtest is a silent disaster
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: pytest (fast tests only)
+        entry: python -m pytest -q -m "not slow"
+        language: system
+        pass_filenames: false
+        always_run: true
